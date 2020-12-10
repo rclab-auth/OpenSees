@@ -64,6 +64,7 @@
 #include "Elastic2Material.h"
 #include "ElasticPPMaterial.h"
 #include "ParallelMaterial.h"
+#include "ASD_SMA_3K.h"
 #include "Concrete01.h"
 #include "Concrete02.h"
 #include "Concrete04.h"
@@ -334,6 +335,7 @@
 #include "DriftRecorder.h"
 #include "MPCORecorder.h"
 #include "VTK_Recorder.h"
+#include "GmshRecorder.h"
 
 // mp_constraint header files
 #include "MP_Constraint.h"
@@ -412,6 +414,7 @@
 #include "DistributedDisplacementControl.h"
 #endif
 #include "LoadControl.h"
+#include "StagedLoadControl.h"
 
 #include "TransientIntegrator.h"
 #include "AlphaOS.h"
@@ -442,6 +445,7 @@
 #include "KRAlphaExplicit.h"
 #include "KRAlphaExplicit_TP.h"
 #include "Newmark.h"
+#include "StagedNewmark.h"
 #include "NewmarkExplicit.h"
 #include "NewmarkHSFixedNumIter.h"
 #include "NewmarkHSIncrLimit.h"
@@ -470,6 +474,10 @@
 #include "InterpolatedGroundMotion.h"
 #include "drm/DRMLoadPatternWrapper.h"
 
+#ifdef _H5DRM
+#include "drm/H5DRM.h"
+#endif
+
 #include "Parameter.h"
 #include "ElementParameter.h"
 #include "MaterialStageParameter.h"
@@ -484,6 +492,7 @@
 #include "RectangularSeries.h"
 #include "ConstantSeries.h"
 #include "TrigSeries.h"
+#include "TriangleSeries.h"
 
 // time series integrators
 #include "TrapezoidalTimeSeriesIntegrator.h"
@@ -492,6 +501,7 @@
 
 #ifdef _PETSC
 #include "PetscSOE.h"
+#include "PetscSolver.h"
 #include "SparseGenColLinSOE.h"
 #endif
 
@@ -1098,6 +1108,9 @@ FEM_ObjectBrokerAllClasses::getNewUniaxialMaterial(int classTag)
     case MAT_TAG_ParallelMaterial:
 	     return new ParallelMaterial();
 
+	case MAT_TAG_ASD_SMA_3K:  
+	     return new ASD_SMA_3K();
+
 	case MAT_TAG_Concrete01:  
 	     return new Concrete01();
 
@@ -1591,6 +1604,10 @@ FEM_ObjectBrokerAllClasses::getNewLoadPattern(int classTag)
 	case PATTERN_TAG_DRMLoadPattern:
 	     return new DRMLoadPatternWrapper();
 
+#ifdef _H5DRM
+    case PATTERN_TAG_H5DRM:
+         return new H5DRM();
+#endif
 	default:
 	     opserr << "FEM_ObjectBrokerAllClasses::getPtrLoadPattern - ";
 	     opserr << " - no Load type exists for class tag ";
@@ -1639,6 +1656,9 @@ FEM_ObjectBrokerAllClasses::getNewTimeSeries(int classTag)
 
         case TSERIES_TAG_ConstantSeries:
 	  return new ConstantSeries;
+
+        case TSERIES_TAG_TriangleSeries:
+          return new TriangleSeries;
 
         case TSERIES_TAG_TrigSeries:
 	  return new TrigSeries;
@@ -1791,6 +1811,9 @@ FEM_ObjectBrokerAllClasses::getPtrNewRecorder(int classTag)
 
         case RECORDER_TAGS_TclFeViewer:  
 	  return 0;
+
+        case RECORDER_TAGS_GmshRecorder:
+           return new GmshRecorder();
 
         case RECORDER_TAGS_MPCORecorder:
           return new MPCORecorder();
@@ -1985,6 +2008,9 @@ FEM_ObjectBrokerAllClasses::getNewStaticIntegrator(int classTag)
 	case INTEGRATOR_TAGS_LoadControl:  
 	     return new LoadControl(1.0,1,1.0,.10); // must recvSelf
 
+    case INTEGRATOR_TAGS_StagedLoadControl:
+        return new StagedLoadControl(1.0, 1, 1.0, .10); // must recvSelf
+
 #ifdef _PARALLEL_PROCESSING
 	case INTEGRATOR_TAGS_DistributedDisplacementControl:  
 	     return new DistributedDisplacementControl(); // must recvSelf
@@ -2092,6 +2118,9 @@ FEM_ObjectBrokerAllClasses::getNewTransientIntegrator(int classTag)
     case INTEGRATOR_TAGS_Newmark:  
 	     return new Newmark();
 
+        case INTEGRATOR_TAGS_StagedNewmark:
+        return new StagedNewmark();
+
     case INTEGRATOR_TAGS_NewmarkExplicit:  
 	     return new NewmarkExplicit();
 
@@ -2183,17 +2212,19 @@ FEM_ObjectBrokerAllClasses::getNewLinearSOE(int classTagSOE)
 	  theSOE = new SparseGenColLinSOE();
 	  return theSOE;
 
-#ifdef _PETSC
-        case LinSOE_TAGS_PetscSOE:  
-	  theSOE = new PetscSOE();
-	  return theSOE;
-#endif
 
 #ifdef _PARALLEL_PROCESSING
 
 #ifdef _MUMPS
         case LinSOE_TAGS_MumpsParallelSOE:  
 	  theSOE = new MumpsParallelSOE();
+          return theSOE;
+#endif
+
+#ifdef _PETSC
+    case LinSOE_TAGS_PetscSOE:
+        thePetscSolver = new PetscSolver();
+        theSOE = new PetscSOE(*thePetscSolver);
 	  return theSOE;
 #endif
 
